@@ -1,7 +1,7 @@
 import streamlit as st                 #web-based dashboard and user interface
 import psycopg2                        #connect Python with PostgreSQL database and execute SQL queries
 
-# ==========================================
+# =========================================
 # DATABASE CONNECTION
 # ==========================================
 def get_connection():                  #Created a reusable function for establishing a PostgreSQL database connection
