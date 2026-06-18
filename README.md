@@ -282,25 +282,6 @@ The dashboard provides:
 
 ---
 
-## 📷 Screenshots
-
-### Login Page
-_Add Screenshot_
-
-### Dashboard
-_Add Screenshot_
-
-### Sales Entry Module
-_Add Screenshot_
-
-### Analytics Dashboard
-_Add Screenshot_
-
-### Reports Module
-_Add Screenshot_
-
----
-
 ## 👨‍💻 Author
 
 **Muthu Pandi B**
