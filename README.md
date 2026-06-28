@@ -284,7 +284,7 @@ The dashboard provides:
 
 ## 👨‍💻 Author
 
-**Muthu Pandi B**
+**Muthu Pandi **
 
 - Data Analyst
 - Python Developer
