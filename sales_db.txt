@@ -1,295 +1,93 @@
---Branches Table Creation 
+-- Branches Table Creation 
 CREATE TABLE branches (
-    branch_id SERIAL PRIMARY KEY,
-    branch_name VARCHAR(100) NOT NULL,
-    branch_admin_name VARCHAR(100) NOT NULL
+    branch_id SERIAL PRIMARY KEY, -- Unique ID for each branch
+    branch_name VARCHAR(100) NOT NULL, -- Name of the branch
+    branch_admin_name VARCHAR(100) NOT NULL -- Admin responsible for the branch
 );
 
---users Table Creation 
+-- users Table Creation 
 CREATE TABLE users (
-    user_id SERIAL PRIMARY KEY,
-    username VARCHAR(100) UNIQUE NOT NULL,
-    password VARCHAR(100) NOT NULL,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    branch_id INT,
-    role VARCHAR(20) NOT NULL
-        CHECK (role IN ('Super Admin', 'Admin')),
-    FOREIGN KEY (branch_id)
-        REFERENCES branches(branch_id)
+    user_id SERIAL PRIMARY KEY, -- Unique ID for the user
+    username VARCHAR(100) UNIQUE NOT NULL, -- Unique login username
+    password VARCHAR(100) NOT NULL, -- Encrypted or plain password
+    email VARCHAR(255) UNIQUE NOT NULL, -- Unique user email
+    branch_id INT, -- Link to the branches table
+    role VARCHAR(20) NOT NULL -- User role identifier
+        CHECK (role IN ('Super Admin', 'Admin')), -- Validate role type
+    FOREIGN KEY (branch_id) -- Link to branch
+        REFERENCES branches(branch_id) -- Reference key
 );
 
-
---customer_sales Table Creation 
+-- customer_sales Table Creation 
 CREATE TABLE customer_sales (
-    sale_id SERIAL PRIMARY KEY,
-
-    branch_id INT NOT NULL,
-
-    sale_date DATE NOT NULL,
-
-    customer_name VARCHAR(100),
-
-    mobile_number VARCHAR(15) UNIQUE,
-
-    product_name VARCHAR(30)
-        CHECK (product_name IN ('DS', 'DA', 'BA', 'FSD')),
-
-    gross_sales NUMERIC(12,2) NOT NULL,
-
-    received_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
-
-    pending_amount NUMERIC(12,2)
-        GENERATED ALWAYS AS
-        (gross_sales - received_amount) STORED,
-
-    status VARCHAR(10) NOT NULL DEFAULT 'Open'
-        CHECK (status IN ('Open', 'Close')),
-
-    CONSTRAINT fk_customer_sales_branch
-        FOREIGN KEY (branch_id)
-        REFERENCES branches(branch_id)
+    sale_id SERIAL PRIMARY KEY, -- Unique ID for each sale
+    branch_id INT NOT NULL, -- ID of branch where sale occurred
+    sale_date DATE NOT NULL, -- Date of the sale
+    customer_name VARCHAR(100), -- Customer full name
+    mobile_number VARCHAR(15) UNIQUE, -- Unique customer contact
+    product_name VARCHAR(30) -- Product identifier
+        CHECK (product_name IN ('DS', 'DA', 'BA', 'FSD')), -- Allowed products
+    gross_sales NUMERIC(12,2) NOT NULL, -- Total price of product
+    received_amount NUMERIC(12,2) NOT NULL DEFAULT 0, -- Total money collected
+    pending_amount NUMERIC(12,2) -- Remaining balance
+        GENERATED ALWAYS AS (gross_sales - received_amount) STORED, -- Computed column
+    status VARCHAR(10) NOT NULL DEFAULT 'Open' -- Payment status
+        CHECK (status IN ('Open', 'Close')), -- Only Open or Close allowed
+    CONSTRAINT fk_customer_sales_branch -- Naming the foreign key
+        FOREIGN KEY (branch_id) -- Linking to branches
+        REFERENCES branches(branch_id) -- Reference column
 );
 
---payment_splits Table Creation 
-
+-- payment_splits Table Creation 
 CREATE TABLE payment_splits (
-    payment_id SERIAL PRIMARY KEY,
-
-    sale_id INT NOT NULL,
-
-    payment_date DATE NOT NULL DEFAULT CURRENT_DATE,
-
-    amount_paid NUMERIC(12,2) NOT NULL
-        CHECK (amount_paid > 0),
-
-    payment_method VARCHAR(50) NOT NULL
-        CHECK (payment_method IN ('Cash', 'UPI', 'Card')),
-
-    CONSTRAINT fk_payment_sale
-        FOREIGN KEY (sale_id)
-        REFERENCES customer_sales(sale_id)
-        ON DELETE CASCADE
+    payment_id SERIAL PRIMARY KEY, -- Unique ID for payment
+    sale_id INT NOT NULL, -- Link to original sale
+    payment_date DATE NOT NULL DEFAULT CURRENT_DATE, -- Date payment was made
+    amount_paid NUMERIC(12,2) NOT NULL -- Amount received
+        CHECK (amount_paid > 0), -- Ensure payment is positive
+    payment_method VARCHAR(50) NOT NULL -- Cash, UPI, or Card
+        CHECK (payment_method IN ('Cash', 'UPI', 'Card')), -- Restrict input
+    CONSTRAINT fk_payment_sale -- Constraint name
+        FOREIGN KEY (sale_id) -- Foreign key to sale
+        REFERENCES customer_sales(sale_id) -- Referenced column
+        ON DELETE CASCADE -- Remove splits if sale is deleted
 );
 
---AUTOMATION LOGIC (TRIGGERS)
-CREATE OR REPLACE FUNCTION update_received_amount()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-AS $$
-BEGIN
-
-    UPDATE customer_sales
-    SET received_amount =
-        COALESCE(
+-- AUTOMATION LOGIC (TRIGGERS)
+CREATE OR REPLACE FUNCTION update_received_amount() -- Create trigger function
+RETURNS TRIGGER -- Return type
+LANGUAGE plpgsql -- Using PL/pgSQL
+AS $$ -- Start function body
+BEGIN -- Begin logic
+    UPDATE customer_sales -- Update the main sale table
+    SET received_amount = -- Set the sum of payments
+        COALESCE( -- Handle nulls as 0
             (
-                SELECT SUM(amount_paid)
+                SELECT SUM(amount_paid) -- Get total paid for this sale
                 FROM payment_splits
                 WHERE sale_id = NEW.sale_id
-            ),
-            0
+            ), 0
         )
-    WHERE sale_id = NEW.sale_id;
+    WHERE sale_id = NEW.sale_id; -- Identify correct record
 
-    UPDATE customer_sales
-    SET status =
+    UPDATE customer_sales -- Second update for status
+    SET status = -- Change status based on balance
         CASE
-            WHEN (gross_sales - received_amount) <= 0
-                THEN 'Close'
-            ELSE 'Open'
+            WHEN (gross_sales - received_amount) <= 0 -- If paid in full
+                THEN 'Close' -- Mark as closed
+            ELSE 'Open' -- Keep as open
         END
-    WHERE sale_id = NEW.sale_id;
+    WHERE sale_id = NEW.sale_id; -- Identify correct record
 
-    RETURN NEW;
+    RETURN NEW; -- Return the updated row
+END; -- End function
+$$; -- End block
 
-END;
-$$;
-CREATE TRIGGER trg_update_received_amount
-AFTER INSERT OR UPDATE OR DELETE
-ON payment_splits
-FOR EACH ROW
-EXECUTE FUNCTION update_received_amount();
+-- INSERT DATA
+INSERT INTO branches (branch_name, branch_admin_name) VALUES ('Chennai','Arun'), ('Bangalore','Karthik'), ('Delhi','Rahul');
+INSERT INTO customer_sales (branch_id, sale_date, customer_name, mobile_number, product_name, gross_sales) VALUES (1, '2026-05-01', 'Vijay', '9876543210', 'DS', 25000), (2, '2026-05-02', 'Priya', '9876543211', 'DA', 30000), (3, '2026-05-03', 'Kumar', '9876543212', 'BA', 45000);
+INSERT INTO payment_splits (sale_id,payment_date,amount_paid,payment_method) VALUES (1,'2026-05-02',10000,'UPI'), (1,'2026-05-05',5000,'Cash'), (2,'2026-05-06',15000,'Card');
 
-
-INSERT INTO branches
-(branch_name, branch_admin_name)
-VALUES
-('Chennai','Arun'),
-('Bangalore','Karthik'),
-('Delhi','Rahul');
-
- 
-INSERT INTO customer_sales
-(
-    branch_id,
-    sale_date,
-    customer_name,
-    mobile_number,
-    product_name,
-    gross_sales
-)
-VALUES
-(1, '2026-05-01', 'Vijay', '9876543210', 'DS', 25000),
-(2, '2026-05-02', 'Priya', '9876543211', 'DA', 30000),
-(3, '2026-05-03', 'Kumar', '9876543212', 'BA', 45000);
-
-INSERT INTO payment_splits
-(sale_id,payment_date,amount_paid,payment_method)
-VALUES
-(1,'2026-05-02',10000,'UPI'),
-(1,'2026-05-05',5000,'Cash'),
-(2,'2026-05-06',15000,'Card');
-
-
---SQL Queries
---1.Retrieve all records from the customer_sales table.
-SELECT * FROM customer_sales;
-SELECT * FROM users;
-SELECT * FROM branches;
-SELECT * FROM payment_splits;
-SELECT * FROM customer_sales
-WHERE status='Open';
-
---2.Aggregation
-SELECT SUM(gross_sales)
-FROM customer_sales;
-SELECT SUM(received_amount)
-FROM customer_sales;
-SELECT SUM(pending_amount)
-FROM customer_sales;
-SELECT AVG(gross_sales)
-FROM customer_sales;
-
---3.Join-Based Queries 
---Joins
---Retrieve sales details along with the branch name
-SELECT
-    cs.sale_id,
-    cs.customer_name,
-    cs.mobile_number,
-    cs.product_name,
-    cs.gross_sales,
-    b.branch_name
-FROM customer_sales cs
-JOIN branches b
-    ON cs.branch_id = b.branch_id;
-
---Retrieve sales details along with total payment received (using payment_splits).
-SELECT
-    cs.sale_id,
-    cs.customer_name,
-    cs.gross_sales,
-    COALESCE(SUM(ps.amount_paid), 0) AS total_payment_received
-FROM customer_sales cs
-LEFT JOIN payment_splits ps
-    ON cs.sale_id = ps.sale_id
-GROUP BY
-    cs.sale_id,
-    cs.customer_name,
-    cs.gross_sales;
-
---Show branch-wise total gross sales (using JOIN & GROUP BY)
-SELECT
-    b.branch_name,
-    SUM(cs.gross_sales) AS total_gross_sales
-FROM branches b
-JOIN customer_sales cs
-    ON b.branch_id = cs.branch_id
-GROUP BY
-    b.branch_name
-ORDER BY
-    total_gross_sales DESC;
-
---Display sales along with payment method used
-SELECT
-    cs.sale_id,
-    cs.customer_name,
-    cs.product_name,
-    ps.payment_method,
-    ps.amount_paid,
-    ps.payment_date
-FROM customer_sales cs
-JOIN payment_splits ps
-    ON cs.sale_id = ps.sale_id;
-
---Retrieve sales along with branch admin name
-SELECT
-    cs.sale_id,
-    cs.customer_name,
-    cs.product_name,
-    cs.gross_sales,
-    b.branch_name,
-    b.branch_admin_name
-FROM customer_sales cs
-JOIN branches b
-    ON cs.branch_id = b.branch_id;
-
-
---Financial Tracking Queries
---1. Find sales where the pending amount is greater than 5000
-SELECT
-    sale_id,
-    customer_name,
-    mobile_number,
-    gross_sales,
-    received_amount,
-    pending_amount
-FROM customer_sales
-WHERE pending_amount > 5000;
-
---2. Retrieve Top 3 Highest Gross Sales
-SELECT
-    sale_id,
-    customer_name,
-    gross_sales
-FROM customer_sales
-ORDER BY gross_sales DESC
-LIMIT 3;
-
---3. Find the Branch with Highest Total Gross Sales
-SELECT
-    b.branch_name,
-    SUM(cs.gross_sales) AS total_gross_sales
-FROM branches b
-JOIN customer_sales cs
-    ON b.branch_id = cs.branch_id
-GROUP BY b.branch_name
-ORDER BY total_gross_sales DESC
-LIMIT 1;
-
---4. Retrieve Monthly Sales Summary (Month & Year Wise)
-SELECT
-    TO_CHAR(sale_date, 'YYYY-MM') AS month_year,
-    COUNT(*) AS total_sales,
-    SUM(gross_sales) AS total_gross_sales,
-    SUM(received_amount) AS total_received,
-    SUM(pending_amount) AS total_pending
-FROM customer_sales
-GROUP BY TO_CHAR(sale_date, 'YYYY-MM')
-ORDER BY month_year;
-
---5. Calculate Payment Method-wise Total Collection
-SELECT
-    payment_method,
-    SUM(amount_paid) AS total_collection
-FROM payment_splits
-GROUP BY payment_method
-ORDER BY total_collection DESC;
-
-SELECT SUM(gross_sales) FROM customer_sales;
-
-SELECT SUM(received_amount) FROM customer_sales;
-
-SELECT SUM(pending_amount) FROM customer_sales;
-
-SELECT COUNT(*) FROM customer_sales;
-
-INSERT INTO users
-(username, password, email, branch_id, role)
-VALUES
-('superadmin', 'admin123', 'superadmin@example.com', NULL, 'Super Admin'),
-
-('admin_chennai', 'admin123', 'admin.chennai@example.com', 1, 'Admin'),
-
-('admin_bangalore', 'admin123', 'admin.bangalore@example.com', 2, 'Admin'),
-
-('admin_delhi', 'admin123', 'admin.delhi@example.com', 3, 'Admin');
+-- SQL Queries Examples
+SELECT * FROM customer_sales; -- Fetch all sales data
+SELECT SUM(gross_sales) FROM customer_sales; -- Calculate total revenue
